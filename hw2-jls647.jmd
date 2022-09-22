@@ -19,7 +19,89 @@ Pkg.instantiate()
 # Problem 1
 
 ## Problem 1.1
+```julia
 
+#A function which takes distance x in km, and inital DO,BOD, and NOD concetration
+#and gives the DO concentration at that distance
+function C(x,Co,Bo,No)
+#given values
+ka=.55
+kc=.35
+kn=.25
+Cs=10
+U=10
+
+#
+a1=exp(-ka*x/U)
+a2=(kc/(ka-kc))*(exp(-kc*x/U)-exp(-ka*x/U))
+a3=(kn/(ka-kn))*(exp(-kn*x/U)-exp(-ka*x/U))
+DO=Cs*(1-a1)+Co*a1-Bo*a2-No*a3
+return DO
+end
+
+#Decay of BOD function
+function B(x,Bo)
+kc=.35
+U=10
+BOD=Bo*exp(-kc*x/U)
+return BOD
+end
+
+#Decay of NOD function
+function N(x,No)
+kn=.35
+U=10
+NOD=No*exp(-kn*x/U)
+return NOD
+end
+
+```
+
+To find initial concetration of DO:
+```math
+\begin{alignat*}{2}
+& & C_{o1}=\frac{C_{River}*Q_{River}+C_{Waste 1}*Q_{Waste 1}}{Q_{River}+Q_{Waste 1}} \\
+\end{alignat*}
+```
+```math
+\begin{alignat*}{2}
+& & C_{o1}=\frac{7.5 \frac{mg}{L}*10^8 \frac{L}{d}+5 \frac{mg}{L}*10^7 \frac{L}{d}}{10^8 \frac{L}{d}+10^7 \frac{L}{d}} = 7.27 \frac{mg}{L}\\
+\end{alignat*}
+```
+The same process is done for CBOD and NBOD at the start of the first inflow and again at the second waste flow
+```math
+\begin{alignat*}{2}
+& & CBOD_{o1}=\frac{5 \frac{mg}{L}*10^8 \frac{L}{d}+50 \frac{mg}{L}*10^7 \frac{L}{d}}{10^8 \frac{L}{d}+10^7 \frac{L}{d}} = 9.09 \frac{mg}{L}\\
+\end{alignat*}
+```
+```math
+\begin{alignat*}{2}
+& & NBOD_{o1}=\frac{5 \frac{mg}{L}*10^8 \frac{L}{d}+35 \frac{mg}{L}*10^7 \frac{L}{d}}{10^8 \frac{L}{d}+10^7 \frac{L}{d}} = 7.72 \frac{mg}{L}\\
+\end{alignat*}
+```
+```julia
+using Plots, Distributions
+
+DO=zeros(51); #initialize DO vector
+DO[1]=7.27 ; #set initial DO concentration with both river inflow and waste source 1
+for i=1:14
+DO[i+1]=C(i,7.27,9.09,7.72); #calculate DO concentration for 1 to 14 km downstream
+end
+
+#calculate inital DO, BOD, and NOD concentrations of inflow diverging with waste source 2
+CBODo2=(1.1*10^8*B(15,9.09)+45*1.5*10^7)/(1.25*10^8);
+NBODo2=(1.1*10^8*N(15,7.72)+35*1.5*10^7)/(1.25*10^8);
+DO[16]=(C(15,7.27,9.09,7.72)*1.1*10^8+1.5*10^7*5)/(1.25*10^8);
+
+#using these initial values, calculate the DO concentration after waste source 2
+for i=16:50
+DO[i+1]=C(i-15,DO[15],CBODo2,NBODo2);
+end
+
+x=0:1:50; #vector of distance values
+
+plot(x,DO)
+```
 ## Problem 1.2
 
 ## Problem 1.3
