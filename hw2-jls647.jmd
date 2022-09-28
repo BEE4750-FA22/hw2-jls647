@@ -105,7 +105,7 @@ plot(x,DO, xguide="Distance downstream from first waste source, x (km)", yguide=
 ```
 ## Problem 1.2
 Using the conditions at the input of the second waste stream as the initial conditions to find DO concentration, you can solve for the distance which achieves 6 mg/L.
-Since the equation seems difficult to solve algebraically, you can find the distance finding the root of C(x)-6. This can be one using the Roots package in Julia. A plot with a horizontal line at DO=6mg/L is shown to provide an inital guess of x.
+Since the equation seems difficult to solve algebraically, you can find the distance finding the root of f(x)=C(x)-6. This can be one using the Roots package in Julia. A plot with a horizontal line at DO=6mg/L is shown to provide an inital guess of x.
 
 ```julia
 using Roots
@@ -126,7 +126,7 @@ NBODo=(1.1*10^8*NBOD(15,7.72)+35*1.5*10^7)/(1.25*10^8);
 f(x)=(Cs*(1-(exp(-ka*x/U)))+Co*(exp(-ka*x/U))-CBODo*((kc/(ka-kc))*(exp(-kc*x/U)-exp(-ka*x/U)))-NBODo*((kn/(ka-kn))*(exp(-kn*x/U)-exp(-ka*x/U))))-6
 #redefine function with only one input, x
 find_zero(f, 30)
-minimum(DO)
+
 
 ```
 Finding the root of the equation shows that at 25.0 km downstream from waste stream 2, the dissolved oxygen concentration rebounds back to 6 mg/L. 
@@ -135,37 +135,7 @@ In order to find the treatment needed to prevent the dissolved oxygen concentrat
 
 ```julia
 
-function C(x,Co,CBODo,NBODo)
-#given values
-ka=.55
-kc=.35
-kn=.25
-Cs=10
-U=6
 
-#alpha value calculations
-a1=exp(-ka*x/U)
-a2=(kc/(ka-kc))*(exp(-kc*x/U)-exp(-ka*x/U))
-a3=(kn/(ka-kn))*(exp(-kn*x/U)-exp(-ka*x/U))
-DO=Cs*(1-a1)+Co*a1-CBODo*a2-NBODo*a3
-return DO
-end
-
-#Decay of CBOD function
-function CBOD(x,CBODo)
-kc=.35
-U=6
-CBOD=CBODo*exp(-kc*x/U)
-return CBOD
-end
-
-#Decay of NBOD function
-function NBOD(x,NBODo)
-kn=.35
-U=6
-NBOD=NBODo*exp(-kn*x/U)
-return NBOD
-end
 
 Co=DO[16]
 
@@ -258,14 +228,55 @@ A 3% treatment of both streams achieves a minimum DO concentration of 4.01 mg/L.
 ## Problem 1.5
 I would treat each waste stream equally. This is because both waste streams contribute to the depletion of dissolved oxygen. While waste stream 2 brings the DO concentration to its minimum point, this minimum is still affected by the DO depletion from waste stream 1. Additional information may change this strategy however. For example, if the cost for treatment is in USD/mg/d, treating only the second waste stream would be less costly.
 ## Problem 1.6
-To estimate the probability that 
+To estimate the probability that treating both waste streams equally, you can run 1000 random trials with the CBOD and NBOD values of the river inflow varying uniformly.
 ```julia
+using Random, Distributions
+
+function isPos(x)
+n=length(x);
+y=zeros(n);
+for i=1:n
+if x[i]>= 0
+y[i]=1;
+else
+y[i]=0;
+end
+end
+return y
+end
 
 
+n=100000;
+minTrials=zeros(n);
+NBODin=zeros(n);
+CBODin=zeros(n);
+NBODo1=zeros(n);
+CBODo1=zeros(n);
+NBODo2=zeros(n);
+CBODo2=zeros(n);
+Co2=zeros(n);
+for i=1:n
+CBODin[i]=rand(4:.01:7);
+NBODin[i]=rand(3:.01:8);
+CBODo1[i]=(10^8*CBODin[i]+50*.97*10^7)/(1.1*10^8);
+NBODo1[i]=(10^8*NBODin[i]+35*.97*10^7)/(1.1*10^8);
+Co2[i]=(C(15,7.27,CBODo1[i],NBODo1[i])*1.1*10^8+5*1.5*10^7)/(1.25*10^8);
+CBODo2[i]=(CBOD(15,CBODo1[i])*1.1*10^8+45*.97*1.5*10^7)/(1.25*10^8);
+NBODo2[i]=(NBOD(15,NBODo1[i])*1.1*10^8+35*.97*1.5*10^7)/(1.25*10^8);
+DO=zeros(35);
+for x=1:35
+DO[x]=C(x,Co2[i],CBODo2[i],NBODo2[i])
+end
+minTrials[i]=minimum(DO);
+end
 
+diff=minTrials-4*ones(n);
+p=isPos(diff);
+successRate=(sum(p))/n
 ```
+Running 100000 random trials with uniformly distributed values for CBOD and NBOD of river inflow, gives a success rate of about .3, meaning about 30% percent of the time the treatment keeps the DO concentration from going below 4 mg/L. This means there is about a 70% chance of failure with the treatment plan of 3% at each waste source.
 ## Problem 1.7
-
+Assuming the values of CBOD and NBOD for the river inflow are correlated produces different results than if they are independent as they were in 1.6.
 ```julia; echo=false
 # This block will not show up in compiled output.
 
@@ -283,9 +294,39 @@ function sample_correlated_uniform(n, a, b, corr_coef=0.7)
   return samples
 end
 ```
+```julia
+n=100000;
+minTrials=zeros(n);
+NBODin=zeros(n);
+CBODin=zeros(n);
+NBODo1=zeros(n);
+CBODo1=zeros(n);
+NBODo2=zeros(n);
+CBODo2=zeros(n);
+Co2=zeros(n);
+BODin=sample_correlated_uniform(n,[4,7],[3,8],.7);
+for i=1:n
+CBODin[i]=BODin[i,1];
+NBODin[i]=BODin[i,2];
+CBODo1[i]=(10^8*CBODin[i]+50*.97*10^7)/(1.1*10^8);
+NBODo1[i]=(10^8*NBODin[i]+35*.97*10^7)/(1.1*10^8);
+Co2[i]=(C(15,7.27,CBODo1[i],NBODo1[i])*1.1*10^8+5*1.5*10^7)/(1.25*10^8);
+CBODo2[i]=(CBOD(15,CBODo1[i])*1.1*10^8+45*.97*1.5*10^7)/(1.25*10^8);
+NBODo2[i]=(NBOD(15,NBODo1[i])*1.1*10^8+35*.97*1.5*10^7)/(1.25*10^8);
+DO=zeros(35);
+for x=1:35
+DO[x]=C(x,Co2[i],CBODo2[i],NBODo2[i])
+end
+minTrials[i]=minimum(DO);
+end
 
-## Problem 1.8
-
+diff=minTrials-4*ones(n);
+p=isPos(diff);
+successRate=(sum(p))/n
 ```
+When the values of CBOD and NBOD of the river inflow are correlated, the success rate increases to about 36%. This means the failure probability decreases to about 64% as opposed to 70% when the BOD values of river inflow were independent.
+## Problem 1.8
+The treatment plan of 3% for both waste streams from problem 1.5 is slightly more reliable if the values of CBOD and NBOD of the river inflow are positively correlated as opposed to independent. You could calculate the failure probability for only treating waste stream 2 under both conditions of dependence for CBOD and NBOD values of river inflow. Then, if you know which scenario of dependence of BOD values best fits the actual conditions, you could choose the treatment plan with the lowest probability of failure.
+
 
 # References
