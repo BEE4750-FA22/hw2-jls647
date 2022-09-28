@@ -14,6 +14,7 @@ weave_options:
 using Pkg
 Pkg.activate(".")
 Pkg.instantiate()
+import Pkg; Pkg.add("Roots")
 ```
 
 # Problem 1
@@ -21,38 +22,37 @@ Pkg.instantiate()
 ## Problem 1.1
 ```julia
 
-#A function which takes distance x in km, and inital DO,BOD, and NOD concetration
-#and gives the DO concentration at that distance
-function C(x,Co,Bo,No)
+#A function which takes distance x in km, and inital DO,BOD, and NOD concetrations and outputs the DO concentration at that distance
+function C(x,Co,CBODo,NBODo)
 #given values
 ka=.55
 kc=.35
 kn=.25
 Cs=10
-U=10
+U=6
 
-#
+#alpha value calculations
 a1=exp(-ka*x/U)
 a2=(kc/(ka-kc))*(exp(-kc*x/U)-exp(-ka*x/U))
 a3=(kn/(ka-kn))*(exp(-kn*x/U)-exp(-ka*x/U))
-DO=Cs*(1-a1)+Co*a1-Bo*a2-No*a3
+DO=Cs*(1-a1)+Co*a1-CBODo*a2-NBODo*a3
 return DO
 end
 
-#Decay of BOD function
-function B(x,Bo)
+#Decay of CBOD function
+function CBOD(x,CBODo)
 kc=.35
-U=10
-BOD=Bo*exp(-kc*x/U)
-return BOD
+U=6
+CBOD=CBODo*exp(-kc*x/U)
+return CBOD
 end
 
-#Decay of NOD function
-function N(x,No)
+#Decay of NBOD function
+function NBOD(x,NBODo)
 kn=.35
-U=10
-NOD=No*exp(-kn*x/U)
-return NOD
+U=6
+NBOD=NBODo*exp(-kn*x/U)
+return NBOD
 end
 
 ```
@@ -89,29 +89,181 @@ DO[i+1]=C(i,7.27,9.09,7.72); #calculate DO concentration for 1 to 14 km downstre
 end
 
 #calculate inital DO, BOD, and NOD concentrations of inflow diverging with waste source 2
-CBODo2=(1.1*10^8*B(15,9.09)+45*1.5*10^7)/(1.25*10^8);
-NBODo2=(1.1*10^8*N(15,7.72)+35*1.5*10^7)/(1.25*10^8);
+CBODo2=(1.1*10^8*CBOD(15,9.09)+45*1.5*10^7)/(1.25*10^8);
+NBODo2=(1.1*10^8*NBOD(15,7.72)+35*1.5*10^7)/(1.25*10^8);
 DO[16]=(C(15,7.27,9.09,7.72)*1.1*10^8+1.5*10^7*5)/(1.25*10^8);
 
 #using these initial values, calculate the DO concentration after waste source 2
 for i=16:50
-DO[i+1]=C(i-15,DO[15],CBODo2,NBODo2);
+DO[i+1]=C(i-15,DO[16],CBODo2,NBODo2);
 end
 
 x=0:1:50; #vector of distance values
 
-plot(x,DO)
+plot(x,DO, xguide="Distance downstream from first waste source, x (km)", yguide= "DO concentration (mg/L)", legend=false)
+
 ```
 ## Problem 1.2
+Using the conditions at the input of the second waste stream as the initial conditions to find DO concentration, you can solve for the distance which achieves 6 mg/L.
+Since the equation seems difficult to solve algebraically, you can find the distance finding the root of C(x)-6. This can be one using the Roots package in Julia. A plot with a horizontal line at DO=6mg/L is shown to provide an inital guess of x.
 
+```julia
+using Roots
+
+plot(x,DO, xguide="Distance downstream from first waste source, x (km)", yguide= "DO concentration (mg/L)", legend=false);
+hline!([6])
+
+
+ka=.55;
+kc=.35;
+kn=.25;
+Cs=10;
+U=6;
+Co=DO[16];
+CBODo=(1.1*10^8*CBOD(15,9.09)+45*1.5*10^7)/(1.25*10^8);
+NBODo=(1.1*10^8*NBOD(15,7.72)+35*1.5*10^7)/(1.25*10^8);
+
+f(x)=(Cs*(1-(exp(-ka*x/U)))+Co*(exp(-ka*x/U))-CBODo*((kc/(ka-kc))*(exp(-kc*x/U)-exp(-ka*x/U)))-NBODo*((kn/(ka-kn))*(exp(-kn*x/U)-exp(-ka*x/U))))-6
+#redefine function with only one input, x
+find_zero(f, 30)
+minimum(DO)
+
+```
+Finding the root of the equation shows that at 25.0 km downstream from waste stream 2, the dissolved oxygen concentration rebounds back to 6 mg/L. 
 ## Problem 1.3
+In order to find the treatment needed to prevent the dissolved oxygen concentration from dropping below 4 mg/L, you can test a range of treatment percentages and finding the treatment which has a minimum DO level just at or above 4 mg/L.
 
+```julia
+
+function C(x,Co,CBODo,NBODo)
+#given values
+ka=.55
+kc=.35
+kn=.25
+Cs=10
+U=6
+
+#alpha value calculations
+a1=exp(-ka*x/U)
+a2=(kc/(ka-kc))*(exp(-kc*x/U)-exp(-ka*x/U))
+a3=(kn/(ka-kn))*(exp(-kn*x/U)-exp(-ka*x/U))
+DO=Cs*(1-a1)+Co*a1-CBODo*a2-NBODo*a3
+return DO
+end
+
+#Decay of CBOD function
+function CBOD(x,CBODo)
+kc=.35
+U=6
+CBOD=CBODo*exp(-kc*x/U)
+return CBOD
+end
+
+#Decay of NBOD function
+function NBOD(x,NBODo)
+kn=.35
+U=6
+NBOD=NBODo*exp(-kn*x/U)
+return NBOD
+end
+
+Co=DO[16]
+
+
+minConc=zeros(20);
+treatment=zeros(20);
+
+
+for x=1:20
+DOtreat=zeros(45);
+CBODo=(1.1*10^8*CBOD(15,9.09)+45*(1-x*.01)*1.5*10^7)/(1.25*10^8);
+NBODo=(1.1*10^8*NBOD(15,7.72)+35*(1-x*.01)*1.5*10^7)/(1.25*10^8);
+for i=1:45
+DOtreat[i]=C(i,Co,CBODo,NBODo)
+end
+minConc[x]=minimum(DOtreat);
+treatment[x]=x*.01
+
+end
+
+minConc
+treatment
+
+
+```
+A treatment of 5% removal will achieve a minimum DO concentration of 4.01 mg/L, just over 4 mg/L.
 ## Problem 1.4
+Now the same can be done with treatment done at both waste streams. Treatment done at the first waste stream will affect the inital DO, CBOD, and NBOD concentrations at the second waste stream.
 
+```julia
+
+function C(x,Co,CBODo,NBODo)
+#given values
+ka=.55
+kc=.35
+kn=.25
+Cs=10
+U=6
+
+#alpha value calculations
+a1=exp(-ka*x/U)
+a2=(kc/(ka-kc))*(exp(-kc*x/U)-exp(-ka*x/U))
+a3=(kn/(ka-kn))*(exp(-kn*x/U)-exp(-ka*x/U))
+DO=Cs*(1-a1)+Co*a1-CBODo*a2-NBODo*a3
+return DO
+end
+
+#Decay of CBOD function
+function CBOD(x,CBODo)
+kc=.35
+U=6
+CBOD=CBODo*exp(-kc*x/U)
+return CBOD
+end
+
+#Decay of NBOD function
+function NBOD(x,NBODo)
+kn=.35
+U=6
+NBOD=NBODo*exp(-kn*x/U)
+return NBOD
+end
+
+
+minConc=zeros(11);
+treatment=zeros(11);
+
+
+
+
+for x=0:10
+DOtreat=zeros(45);
+CBODo1=(5*10^8+50*(1-x*.01)*10^7)/(1.1*10^8);
+NBODo1=(5*10^8+35*(1-x*.01)*10^7)/(1.1*10^8);
+Co2=(C(15,7.27,CBODo1,NBODo1)*1.1*10^8+1.5*10^7*5)/(1.25*10^8);
+CBODo2=(1.1*10^8*CBOD(15,CBODo1)+45*(1-x*.01)*1.5*10^7)/(1.25*10^8);
+NBODo2=(1.1*10^8*NBOD(15,NBODo1)+35*(1-x*.01)*1.5*10^7)/(1.25*10^8);
+for i=1:45
+DOtreat[i]=C(i,Co2,CBODo2,NBODo2)
+end
+minConc[x+1]=minimum(DOtreat);
+treatment[x+1]=x*.01
+
+end
+
+minConc
+treatment
+```
+A 3% treatment of both streams achieves a minimum DO concentration of 4.01 mg/L.
 ## Problem 1.5
-
+I would treat each waste stream equally. This is because both waste streams contribute to the depletion of dissolved oxygen. While waste stream 2 brings the DO concentration to its minimum point, this minimum is still affected by the DO depletion from waste stream 1. Additional information may change this strategy however. For example, if the cost for treatment is in USD/mg/d, treating only the second waste stream would be less costly.
 ## Problem 1.6
+To estimate the probability that 
+```julia
 
+
+
+```
 ## Problem 1.7
 
 ```julia; echo=false
